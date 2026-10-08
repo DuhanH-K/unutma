@@ -1,0 +1,44 @@
+{
+  "source": "C:\\Users\\pc\\Downloads\\ChatGPT Image 30 A\u011fu 2026 23_45_40.png",
+  "resolution": [
+    1536,
+    1024
+  ],
+  "sourceSha256": "3cc70a9c38bd8475c03daaad4c125d8c8198241ae6bdc2663bbb97440b9f9f76",
+  "reviewed": true,
+  "desktopAssetsFound": false,
+  "outputs": [
+    {
+      "path": "assets\\brand\\unutma_app_icon_1024.png",
+      "sha256": "f386f5fc08bfbd815bcd917af8fa473782c2703b8d47c8ade603e4dc734c52ed",
+      "size": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "path": "assets\\brand\\unutma_logo_mark.png",
+      "sha256": "a9dd261b29db791be3124cdbbb9c310764c684f9a8582346a577456bf23efd65",
+      "size": [
+        512,
+        512
+      ]
+    },
+    {
+      "path": "assets\\illustrations\\onboarding_notification_to_action.png",
+      "sha256": "cf61ad67434a9e0ac0a0a6c8290e5546851e05faccc13ed5fa4a6d05a295aa3b",
+      "size": [
+        360,
+        440
+      ]
+    },
+    {
+      "path": "assets\\illustrations\\onboarding_privacy_local.png",
+      "sha256": "cce2f1ac5babcd9d3c9ced9382c5fcf54395f844027fa78f52b8bd6782bb482a",
+      "size": [
+        360,
+        440
+      ]
+    }
+  ]
+}

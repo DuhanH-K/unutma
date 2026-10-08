@@ -1,0 +1,44 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" tools:node="remove"/>
+    <application android:label="@string/app_name" android:name="${applicationName}" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher_round" android:allowBackup="false" android:fullBackupContent="@xml/backup_rules" android:dataExtractionRules="@xml/data_extraction_rules" android:usesCleartextTraffic="false">
+        <meta-data android:name="com.google.android.gms.ads.APPLICATION_ID" android:value="${ADMOB_APP_ID}"/>
+        <!-- Manual foreground initialization prevents the ads SDK from starting when
+             Android wakes only the notification-listener process. -->
+        <provider android:name="com.google.android.gms.ads.MobileAdsInitProvider" tools:node="remove"/>
+        <activity android:name="app.unutma.unutma.MainActivity" android:exported="true" android:launchMode="singleTop" android:taskAffinity="" android:theme="@style/LaunchTheme" android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode" android:hardwareAccelerated="true" android:windowSoftInputMode="adjustResize">
+            <meta-data android:name="io.flutter.embedding.android.NormalTheme" android:resource="@style/NormalTheme"/>
+            <meta-data android:name="flutter_deeplinking_enabled" android:value="false"/>
+            <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
+            <intent-filter android:label="@string/share_with_unutma">
+                <action android:name="android.intent.action.SEND"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:mimeType="text/plain"/>
+            </intent-filter>
+            <intent-filter android:label="@string/share_with_unutma">
+                <action android:name="android.intent.action.PROCESS_TEXT"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:mimeType="text/plain"/>
+            </intent-filter>
+        </activity>
+        <service android:name="app.unutma.unutma.notification.UnutmaNotificationListenerService" android:label="@string/app_name" android:exported="true" android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter><action android:name="android.service.notification.NotificationListenerService"/></intent-filter>
+            <meta-data android:name="android.service.notification.default_autobind_listenerservice" android:value="true"/>
+        </service>
+        <receiver android:name="app.unutma.unutma.reminder.ReminderActionReceiver" android:exported="false"/>
+        <receiver android:name="app.unutma.unutma.reminder.ReminderAlarmReceiver" android:exported="false"/>
+        <receiver android:name="app.unutma.unutma.notification.CaptureDecisionReceiver" android:exported="false"/>
+        <receiver android:name="app.unutma.unutma.notification.NotificationListenerRebindReceiver" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+                <action android:name="android.intent.action.USER_UNLOCKED"/>
+                <action android:name="android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED"/>
+            </intent-filter>
+        </receiver>
+        <service android:name="androidx.work.impl.foreground.SystemForegroundService" tools:node="remove"/>
+        <meta-data android:name="flutterEmbedding" android:value="2"/>
+    </application>
+</manifest>

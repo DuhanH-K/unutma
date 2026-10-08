@@ -1,0 +1,22 @@
+<resources>
+    <string name="app_name">UNUTMA</string>
+    <string name="reminders">Reminders</string>
+    <string name="reminders_description">Reminders for your action cards</string>
+    <string name="reminder_title">It’s time to remember</string>
+    <string name="reminder_compact_body">Reminder due • Check your card</string>
+    <string name="reminder_body">Your reminder is due. Open the card to view its private details.</string>
+    <string name="reminder_summary">Reminder due now</string>
+    <string name="reminder_private_body">You have a private reminder.</string>
+    <string name="done">Done</string>
+    <string name="snooze">Tomorrow</string>
+    <string name="suggestions">Suggestions</string>
+    <string name="suggestions_description">Action candidates waiting for your decision</string>
+    <string name="suggestion_body">Add this to UNUTMA?</string>
+    <string name="add">Add</string>
+    <string name="review">Review</string>
+    <string name="edit">Edit</string>
+    <string name="ignore">Ignore</string>
+    <string name="automatic_message_note">Created automatically from a message notification.</string>
+    <string name="shared_content">Shared content</string>
+    <string name="share_with_unutma">Add to UNUTMA</string>
+</resources>

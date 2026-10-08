@@ -1,0 +1,22 @@
+<resources>
+    <string name="app_name">UNUTMA</string>
+    <string name="reminders">Hatırlatmalar</string>
+    <string name="reminders_description">Aksiyon kartlarınız için hatırlatmalar</string>
+    <string name="reminder_title">Hatırlama zamanı</string>
+    <string name="reminder_compact_body">Hatırlama zamanı • Kartını kontrol et</string>
+    <string name="reminder_body">Hatırlatıcının zamanı geldi. Özel ayrıntıları görmek için kartını aç.</string>
+    <string name="reminder_summary">Şimdi hatırlatılıyor</string>
+    <string name="reminder_private_body">Özel bir hatırlatıcın var.</string>
+    <string name="done">Tamamlandı</string>
+    <string name="snooze">Yarın hatırlat</string>
+    <string name="suggestions">Öneriler</string>
+    <string name="suggestions_description">Kararını bekleyen aksiyon adayları</string>
+    <string name="suggestion_body">Bunu UNUTMA’ya ekleyelim mi?</string>
+    <string name="add">Ekle</string>
+    <string name="review">İncele</string>
+    <string name="edit">Düzenle</string>
+    <string name="ignore">Yoksay</string>
+    <string name="automatic_message_note">Mesaj bildiriminden otomatik oluşturuldu.</string>
+    <string name="shared_content">Paylaşılan içerik</string>
+    <string name="share_with_unutma">UNUTMA’ya ekle</string>
+</resources>
