@@ -246,6 +246,17 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('resuming the app retries ad initialization', (tester) async {
+    final ads = _TrackingAdService();
+    await launch(tester, MemoryRepository(), adService: ads);
+    final initializationsBeforeResume = ads.initializations;
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
+
+    expect(ads.initializations, initializationsBeforeResume + 1);
+  });
+
   testWidgets('parsed shared text opens its review card', (tester) async {
     final repo = MemoryRepository()
       ..items = [fixtureCards().first.copyWith(status: CardStatus.review)]
@@ -439,9 +450,15 @@ class _EnabledAdService extends NoOpAdService {
 }
 
 class _TrackingAdService extends NoOpAdService {
+  int initializations = 0;
   int suppressions = 0;
   int resumptions = 0;
   bool suppressed = false;
+
+  @override
+  Future<void> initialize() async {
+    initializations++;
+  }
 
   @override
   void suppressForSession() {

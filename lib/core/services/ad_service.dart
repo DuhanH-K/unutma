@@ -8,6 +8,54 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/app_config.dart';
 
+enum ConsentUpdateOutcome { succeeded, failed, timedOut }
+
+class ConsentUpdateAttempt {
+  const ConsentUpdateAttempt(this.outcome, [this.error]);
+
+  final ConsentUpdateOutcome outcome;
+  final Object? error;
+}
+
+typedef ConsentUpdateStarter = void Function(
+  void Function() onSuccess,
+  void Function(Object) onFailure,
+);
+
+@visibleForTesting
+Future<ConsentUpdateAttempt> waitForConsentInfoUpdate({
+  required ConsentUpdateStarter start,
+  Duration timeout = const Duration(seconds: 10),
+}) async {
+  final result = Completer<ConsentUpdateAttempt>();
+  try {
+    start(
+      () {
+        if (!result.isCompleted) {
+          result.complete(
+            const ConsentUpdateAttempt(ConsentUpdateOutcome.succeeded),
+          );
+        }
+      },
+      (error) {
+        if (!result.isCompleted) {
+          result.complete(
+            ConsentUpdateAttempt(ConsentUpdateOutcome.failed, error),
+          );
+        }
+      },
+    );
+  } catch (error) {
+    if (!result.isCompleted) {
+      result.complete(ConsentUpdateAttempt(ConsentUpdateOutcome.failed, error));
+    }
+  }
+  return result.future.timeout(
+    timeout,
+    onTimeout: () => const ConsentUpdateAttempt(ConsentUpdateOutcome.timedOut),
+  );
+}
+
 class AdRuntimeConfig {
   const AdRuntimeConfig({
     required this.enabled,
@@ -296,6 +344,8 @@ class GoogleMobileAdsService implements AdService {
   bool _disposed = false;
   Timer? _interstitialRetry;
   int _interstitialLoadFailures = 0;
+  Timer? _initializationRetry;
+  int _initializationFailures = 0;
 
   String get _platformLabel => switch (defaultTargetPlatform) {
     TargetPlatform.android => 'Android',
@@ -329,9 +379,15 @@ class GoogleMobileAdsService implements AdService {
   Future<void> initialize() async {
     if (_initialized || _initializing || _disposed) return;
     _initializing = true;
+    var retryInitialization = false;
     try {
       _config = await _configLoader.load();
-      if (!_config.isUsable) return;
+      if (!_config.isUsable) {
+        _logAds('disabled: runtime configuration is unavailable or invalid');
+        _initialized = true;
+        return;
+      }
+      _logAds('runtime configuration accepted');
       _emit(
         const AdPrivacyState(
           enabled: true,
@@ -340,31 +396,77 @@ class GoogleMobileAdsService implements AdService {
         ),
       );
 
-      var updateSucceeded = false;
-      final update = Completer<void>();
-      ConsentInformation.instance.requestConsentInfoUpdate(
-        ConsentRequestParameters(),
-        () {
-          updateSucceeded = true;
-          if (!update.isCompleted) update.complete();
-        },
-        (_) {
-          if (!update.isCompleted) update.complete();
+      _logAds('consent information update requested');
+      final update = await waitForConsentInfoUpdate(
+        start: (onSuccess, onFailure) {
+          ConsentInformation.instance.requestConsentInfoUpdate(
+            ConsentRequestParameters(),
+            onSuccess,
+            onFailure,
+          );
         },
       );
-      await update.future;
-      if (updateSucceeded) {
-        await ConsentForm.loadAndShowConsentFormIfRequired((_) {});
+      var consentFlowCompleted = false;
+      switch (update.outcome) {
+        case ConsentUpdateOutcome.succeeded:
+          _logAds('consent information updated');
+          FormError? formError;
+          await ConsentForm.loadAndShowConsentFormIfRequired(
+            (error) => formError = error,
+          ).timeout(const Duration(seconds: 15));
+          if (formError == null) {
+            consentFlowCompleted = true;
+            _logAds('consent form flow completed');
+          } else {
+            retryInitialization = true;
+            _logAds('consent form failed: code=${formError!.errorCode}');
+          }
+        case ConsentUpdateOutcome.failed:
+          retryInitialization = true;
+          _logAds(
+            'consent information update failed: ${update.error.runtimeType}',
+          );
+        case ConsentUpdateOutcome.timedOut:
+          retryInitialization = true;
+          _logAds('consent information update timed out');
       }
       await _refreshConsentState();
-      if (_state.canRequestAds) await _startMobileAds();
-      _initialized = true;
-    } catch (_) {
+      if (_state.canRequestAds) {
+        await _startMobileAds();
+        _initialized = true;
+      } else if (consentFlowCompleted) {
+        // A completed flow can legitimately leave consent unavailable.
+        _initialized = true;
+      }
+    } catch (error) {
+      retryInitialization = true;
+      _logAds('initialization failed: ${error.runtimeType}');
       // Ads fail closed; platform, consent, or network failures must never
       // affect the core reminder behavior.
     } finally {
       _initializing = false;
+      if (_initialized) {
+        _initializationFailures = 0;
+        _initializationRetry?.cancel();
+        _initializationRetry = null;
+      } else if (retryInitialization) {
+        _scheduleInitializationRetry();
+      }
     }
+  }
+
+  void _scheduleInitializationRetry() {
+    if (_disposed || _initialized || _initializationRetry?.isActive == true) {
+      return;
+    }
+    final exponent = _initializationFailures.clamp(0, 4);
+    final delay = Duration(seconds: 30 * (1 << exponent));
+    _initializationFailures++;
+    _logAds('initialization retry scheduled: ${delay.inSeconds}s');
+    _initializationRetry = Timer(delay, () {
+      _initializationRetry = null;
+      unawaited(initialize());
+    });
   }
 
   Future<void> _refreshConsentState() async {
@@ -500,6 +602,7 @@ class GoogleMobileAdsService implements AdService {
             failed.dispose();
             complete(null);
           },
+          onAdImpression: (_) => _logAds('[Banner] impression'),
         ),
       );
       await ad.load();
@@ -511,7 +614,8 @@ class GoogleMobileAdsService implements AdService {
           return null;
         },
       );
-    } catch (_) {
+    } catch (error) {
+      _logAds('[Banner] load failed: ${error.runtimeType}');
       return null;
     }
   }
@@ -605,6 +709,7 @@ class GoogleMobileAdsService implements AdService {
         });
         if (!shown.isCompleted) shown.complete(true);
       },
+      onAdImpression: (_) => _logInterstitial('impression'),
       onAdDismissedFullScreenContent: (value) {
         _logInterstitial('dismissed');
         value.dispose();
@@ -664,7 +769,8 @@ class GoogleMobileAdsService implements AdService {
         _disposeBanners();
       }
       return formError == null;
-    } catch (_) {
+    } catch (error) {
+      _logAds('privacy options failed: ${error.runtimeType}');
       return false;
     }
   }
@@ -680,6 +786,8 @@ class GoogleMobileAdsService implements AdService {
   Future<void> dispose() async {
     if (_disposed) return;
     _disposed = true;
+    _initializationRetry?.cancel();
+    _initializationRetry = null;
     _interstitialRetry?.cancel();
     _interstitialRetry = null;
     _interstitial?.dispose();

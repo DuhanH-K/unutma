@@ -92,6 +92,29 @@ void main() {
     );
   });
 
+  test('consent update helper completes on success', () async {
+    final result = await waitForConsentInfoUpdate(
+      start: (success, _) => success(),
+    );
+    expect(result.outcome, ConsentUpdateOutcome.succeeded);
+  });
+
+  test('consent update helper reports callback failure', () async {
+    final result = await waitForConsentInfoUpdate(
+      start: (_, failure) => failure(StateError('network')),
+    );
+    expect(result.outcome, ConsentUpdateOutcome.failed);
+    expect(result.error, isA<StateError>());
+  });
+
+  test('consent update helper times out deterministically', () async {
+    final result = await waitForConsentInfoUpdate(
+      start: (_, _) {},
+      timeout: const Duration(milliseconds: 1),
+    );
+    expect(result.outcome, ConsentUpdateOutcome.timedOut);
+  });
+
   testWidgets('banner load failure leaves no gap and does not crash', (
     tester,
   ) async {
@@ -110,6 +133,31 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(tester.getSize(find.byType(AdaptiveBannerAdSlot)).height, 0);
   });
+
+  testWidgets('banner retries after a load failure without reserving space', (
+    tester,
+  ) async {
+    final service = _CountingFailingBannerAdService();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [adServiceProvider.overrideWithValue(service)],
+        child: const MaterialApp(
+          home: Scaffold(
+            bottomNavigationBar: AdaptiveBannerAdSlot(
+              retryBaseDelay: Duration(milliseconds: 10),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 11));
+    await tester.pump();
+
+    expect(service.loadAttempts, greaterThanOrEqualTo(2));
+    expect(tester.getSize(find.byType(AdaptiveBannerAdSlot)).height, 0);
+    expect(tester.takeException(), isNull);
+  });
 }
 
 class _FailingBannerAdService extends NoOpAdService {
@@ -121,4 +169,14 @@ class _FailingBannerAdService extends NoOpAdService {
     canRequestAds: true,
     privacyOptionsRequired: false,
   );
+}
+
+class _CountingFailingBannerAdService extends _FailingBannerAdService {
+  int loadAttempts = 0;
+
+  @override
+  Future<LoadedBannerAd?> loadAdaptiveBanner(int width) async {
+    loadAttempts++;
+    return null;
+  }
 }

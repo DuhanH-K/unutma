@@ -112,7 +112,10 @@ class _UnutmaAppState extends ConsumerState<UnutmaApp>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) refresh();
+    if (state == AppLifecycleState.resumed) {
+      unawaited(ref.read(adServiceProvider).initialize());
+      unawaited(refresh());
+    }
   }
 
   Future<void> refresh() async {
