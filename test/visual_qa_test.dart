@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -14,39 +13,11 @@ import 'support/memory_repository.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUpAll(() async {
-    // Flutter SDK includes licensed Roboto fonts. Read them in tests only; no host font dependency.
-    final config = File('.dart_tool/package_config.json');
-    final packages =
-        (jsonDecode(config.readAsStringSync())
-                as Map<String, dynamic>)['packages']
-            as List<dynamic>;
-    final flutter = packages.cast<Map<String, dynamic>>().firstWhere(
-      (p) => p['name'] == 'flutter',
+    goldenFileComparator = AuditedPlatformGoldenComparator(
+      Uri.file('${Directory.current.path}/test/visual_qa_test.dart'),
+      platformName: _goldenPlatform,
     );
-    final packageRoot = config.absolute.uri.resolve('${flutter['rootUri']}/');
-    final sdk = packageRoot.resolve('../../');
-    final font = File.fromUri(
-      sdk.resolve(
-        'bin/cache/dart-sdk/bin/resources/devtools/assets/fonts/Roboto/Roboto-Regular.ttf',
-      ),
-    );
-    final loader = FontLoader('Roboto')
-      ..addFont(Future.value(ByteData.sublistView(font.readAsBytesSync())))
-      ..addFont(
-        Future.value(
-          ByteData.sublistView(
-            File.fromUri(
-              sdk.resolve(
-                'bin/cache/dart-sdk/bin/resources/devtools/assets/fonts/Roboto/Roboto-Bold.ttf',
-              ),
-            ).readAsBytesSync(),
-          ),
-        ),
-      );
-    await loader.load();
-    final icons = FontLoader('MaterialIcons')
-      ..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'));
-    await icons.load();
+    await _loadGoldenFonts();
   });
   final cases = <String, String>{
     'dashboard': '/',
@@ -167,8 +138,67 @@ void main() {
       expect(tester.takeException(), isNull);
       await expectLater(
         find.byKey(const Key('capture')),
-        matchesGoldenFile('goldens/${entry.key}.png'),
+        matchesGoldenFile('goldens/$_goldenPlatform/${entry.key}.png'),
       );
     });
+  }
+}
+
+String get _goldenPlatform {
+  if (Platform.isWindows) return 'windows';
+  if (Platform.isMacOS) return 'macos';
+  throw UnsupportedError(
+    'Visual golden tests have no verified baseline for '
+    '${Platform.operatingSystem}.',
+  );
+}
+
+Future<void> _loadGoldenFonts() async {
+  Future<ByteData> readFont(String name) async {
+    final bytes = await File('test/fonts/$name').readAsBytes();
+    return ByteData.sublistView(bytes);
+  }
+
+  final roboto = FontLoader('Roboto');
+  for (final name in const [
+    'Roboto-Regular.ttf',
+    'Roboto-Medium.ttf',
+    'Roboto-Bold.ttf',
+    'Roboto-Black.ttf',
+  ]) {
+    roboto.addFont(readFont(name));
+  }
+  await roboto.load();
+
+  final icons = FontLoader('MaterialIcons')
+    ..addFont(readFont('MaterialIcons-Regular.otf'));
+  await icons.load();
+}
+
+final class AuditedPlatformGoldenComparator extends LocalFileComparator {
+  AuditedPlatformGoldenComparator(super.testFile, {required this.platformName});
+
+  final String platformName;
+
+  @override
+  Future<bool> compare(Uint8List imageBytes, Uri golden) async {
+    final baseline = File.fromUri(basedir.resolveUri(golden));
+    if (!await baseline.exists()) {
+      final failures = Directory.fromUri(basedir.resolve('failures/'));
+      await failures.create(recursive: true);
+      final goldenName = golden.pathSegments.last;
+      final candidate = File(
+        '${failures.path}/'
+        '${goldenName.substring(0, goldenName.length - 4)}_'
+        '${platformName}_candidate.png',
+      );
+      await candidate.writeAsBytes(imageBytes, flush: true);
+      throw TestFailure(
+        'No reviewed $platformName golden exists for $goldenName. '
+        'The rendered candidate was written to ${candidate.path}; inspect it '
+        'before adding it as a baseline.',
+      );
+    }
+    return super.compare(imageBytes, golden);
   }
 }

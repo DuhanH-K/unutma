@@ -4,7 +4,7 @@ workflows:
     instance_type: mac_mini_m2
     max_build_duration: 60
     environment:
-      flutter: stable
+      flutter: 3.47.0
       xcode: latest
       ios_signing:
         distribution_type: app_store
@@ -14,7 +14,7 @@ workflows:
         script: flutter pub get
       - name: Validate Dart and tests
         script: |
-          dart format --output=none --set-exit-if-changed .
+          dart format --output=none --set-exit-if-changed lib test pigeons tools
           flutter analyze
           flutter test
       - name: Configure iOS signing
@@ -25,3 +25,4 @@ workflows:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
       - flutter_drive.log
+      - test/failures/**
