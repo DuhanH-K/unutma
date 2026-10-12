@@ -48,4 +48,33 @@ void main() {
     expect(plist, contains('cstr6suwn9.skadnetwork'));
     expect(plist, isNot(contains('NSUserTrackingUsageDescription')));
   });
+
+  test('Codemagic keeps iOS version independent of Android release', () {
+    final workflow = File('codemagic.yaml').readAsStringSync();
+    expect(workflow, contains('IOS_VERSION_NAME: "1.0.12"'));
+    expect(workflow, contains('IOS_BUILD_NUMBER: "14"'));
+    expect(workflow, contains(r'--build-name="$IOS_VERSION_NAME"'));
+    expect(workflow, contains(r'--build-number="$IOS_BUILD_NUMBER"'));
+    expect(workflow, contains('flutter: 3.47.0'));
+    expect(workflow, contains('bundle_identifier: app.unutma.mobile'));
+  });
+
+  test(
+    'Codemagic preserves signing integration without automatic publishing',
+    () {
+      final workflow = File('codemagic.yaml').readAsStringSync();
+      expect(workflow, contains('app_store_connect: Codemagic'));
+      expect(workflow, contains('distribution_type: app_store'));
+      expect(workflow, contains('xcode-project use-profiles'));
+      expect(workflow, contains('build/ios/ipa/*.ipa'));
+      expect(
+        RegExp(r'^\s*publishing:', multiLine: true).hasMatch(workflow),
+        false,
+      );
+      expect(
+        RegExp(r'^\s*triggering:', multiLine: true).hasMatch(workflow),
+        false,
+      );
+    },
+  );
 }
