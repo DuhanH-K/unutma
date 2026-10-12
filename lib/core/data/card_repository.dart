@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/services.dart';
 
 import '../domain/action_card.dart';
@@ -30,11 +32,17 @@ abstract interface class CardRepository {
 }
 
 class NativeCardRepository implements CardRepository {
-  NativeCardRepository([UnutmaApi? api]) : _api = api ?? UnutmaApi();
+  NativeCardRepository([
+    UnutmaApi? api,
+    this.timeout = const Duration(seconds: 8),
+  ]) : _api = api ?? UnutmaApi();
   final UnutmaApi _api;
+  final Duration timeout;
   Future<T> _call<T>(Future<T> Function() call) async {
     try {
-      return await call();
+      return await call().timeout(timeout);
+    } on TimeoutException {
+      throw const AppFailure(FailureKind.bridge);
     } on PlatformException catch (e) {
       throw AppFailure(switch (e.code) {
         'invalid_input' => FailureKind.invalidInput,

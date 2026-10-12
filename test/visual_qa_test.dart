@@ -7,6 +7,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:unutma/app.dart';
 import 'package:unutma/core/data/providers.dart';
 import 'package:unutma/core/domain/action_card.dart';
+import 'package:unutma/core/services/ad_providers.dart';
+import 'package:unutma/core/services/ad_service.dart';
 
 import 'support/memory_repository.dart';
 
@@ -101,6 +103,9 @@ void main() {
         overrides: [
           repositoryProvider.overrideWithValue(repo),
           clockProvider.overrideWithValue(() => fixtureNow),
+          // Keep the reviewed visual fixture stable; production reads native metadata.
+          appVersionProvider.overrideWith((_) async => '1.0.5 (7)'),
+          adServiceProvider.overrideWithValue(const NoOpAdService()),
         ],
       );
       addTearDown(container.dispose);

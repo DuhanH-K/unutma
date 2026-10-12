@@ -4,6 +4,7 @@ import 'package:pigeon/pigeon.dart';
   PigeonOptions(
     dartPackageName: 'unutma',
     dartOut: 'lib/core/platform/unutma_api.g.dart',
+    swiftOut: 'ios/Runner/UnutmaApi.g.swift',
     kotlinOut:
         'android/app/src/main/kotlin/app/unutma/unutma/bridge/UnutmaApi.g.kt',
     kotlinOptions: KotlinOptions(package: 'app.unutma.unutma.bridge'),

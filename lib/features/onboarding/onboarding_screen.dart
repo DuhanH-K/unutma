@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/data/providers.dart';
 import '../../core/domain/action_card.dart';
 import '../../core/widgets/shared.dart';
+import '../../core/platform/platform_capabilities.dart';
 
 class OnboardingScreen extends ConsumerStatefulWidget {
   const OnboardingScreen({super.key, this.disclosureOnly = false});
@@ -26,7 +27,13 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     setState(() => busy = true);
     final ok = await runAction(context, () async {
       await ref.read(preferencesProvider.notifier).change(onboarded: true);
-      if (access) await ref.read(repositoryProvider).openAccess();
+      if (access) {
+        if (isIOS) {
+          await ref.read(repositoryProvider).requestReminders();
+        } else {
+          await ref.read(repositoryProvider).openAccess();
+        }
+      }
     });
     if (mounted) {
       setState(() => busy = false);
@@ -44,8 +51,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       l.onboardAccess,
     ];
     final bodies = [
-      l.onboardValueBody,
-      l.onboardTransformBody,
+      isIOS ? l.iosOnboardValueBody : l.onboardValueBody,
+      isIOS ? l.iosOnboardTransformBody : l.onboardTransformBody,
       l.privacyBody,
       '',
     ];
@@ -97,7 +104,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                                 .onSurfaceVariant,
                           ),
                         ),
-                      if (page == 3) ...[
+                      if (page == 3 && isIOS) Text(l.iosRemindersBody),
+                      if (page == 3 && !isIOS) ...[
                         DisclosureRow(
                           icon: Icons.text_snippet_outlined,
                           title: l.accessWhat,
@@ -144,7 +152,9 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                             : () => setState(() => page++),
                         child: Text(
                           page == 3
-                              ? l.enableNotificationAccess
+                              ? isIOS
+                                    ? l.reminderPermission
+                                    : l.enableNotificationAccess
                               : l.continueLabel,
                         ),
                       ),

@@ -23,31 +23,60 @@ class AdaptiveBannerAdSlot extends ConsumerStatefulWidget {
       _AdaptiveBannerAdSlotState();
 }
 
-class _AdaptiveBannerAdSlotState extends ConsumerState<AdaptiveBannerAdSlot> {
+class _AdaptiveBannerAdSlotState extends ConsumerState<AdaptiveBannerAdSlot>
+    with WidgetsBindingObserver {
   LoadedBannerAd? _banner;
   int? _requestedWidth;
   bool _loading = false;
   Timer? _retryTimer;
   int _loadFailures = 0;
+  int _generation = 0;
+  bool _foreground = true;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _foreground =
+        WidgetsBinding.instance.lifecycleState == null ||
+        WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _foreground = state == AppLifecycleState.resumed;
+    if (!_foreground) {
+      _clear();
+    } else {
+      setState(() {});
+    }
+  }
 
   void _request(int width) {
-    if (_loading || width <= 0 || width == _requestedWidth) return;
+    if (!_foreground || _loading || width <= 0 || width == _requestedWidth) {
+      return;
+    }
     _retryTimer?.cancel();
     _retryTimer = null;
     _requestedWidth = width;
+    final generation = _generation;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) unawaited(_load(width));
+      if (mounted && generation == _generation && _foreground) {
+        unawaited(_load(width, generation));
+      }
     });
   }
 
-  Future<void> _load(int width) async {
+  Future<void> _load(int width, int generation) async {
     if (_loading || !mounted) return;
     _loading = true;
     final service = ref.read(adServiceProvider);
     final loaded = await service.loadAdaptiveBanner(width);
-    if (!mounted || _requestedWidth != width) {
+    if (!mounted ||
+        generation != _generation ||
+        !_foreground ||
+        _requestedWidth != width) {
       if (loaded != null) service.releaseBanner(loaded);
-      _loading = false;
       return;
     }
     final previous = _banner;
@@ -81,6 +110,7 @@ class _AdaptiveBannerAdSlotState extends ConsumerState<AdaptiveBannerAdSlot> {
   }
 
   void _clear() {
+    _generation++;
     final current = _banner;
     _retryTimer?.cancel();
     _retryTimer = null;
@@ -95,6 +125,8 @@ class _AdaptiveBannerAdSlotState extends ConsumerState<AdaptiveBannerAdSlot> {
 
   @override
   void dispose() {
+    _generation++;
+    WidgetsBinding.instance.removeObserver(this);
     _retryTimer?.cancel();
     final current = _banner;
     if (current != null) ref.read(adServiceProvider).releaseBanner(current);
@@ -105,7 +137,7 @@ class _AdaptiveBannerAdSlotState extends ConsumerState<AdaptiveBannerAdSlot> {
   Widget build(BuildContext context) {
     final canRequestAds =
         ref.watch(adPrivacyStateProvider).value?.canRequestAds == true;
-    if (!canRequestAds) {
+    if (!canRequestAds || !_foreground) {
       if (_banner != null || _requestedWidth != null) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) _clear();
@@ -115,10 +147,14 @@ class _AdaptiveBannerAdSlotState extends ConsumerState<AdaptiveBannerAdSlot> {
     }
     return LayoutBuilder(
       builder: (context, constraints) {
-        final width = constraints.maxWidth.floor();
+        final width =
+            (constraints.maxWidth - MediaQuery.paddingOf(context).horizontal)
+                .floor();
         _request(width);
         final banner = _banner;
-        if (banner == null) return const SizedBox.shrink();
+        if (banner == null || banner.size.width > width) {
+          return const SizedBox.shrink();
+        }
         return ColoredBox(
           color: Theme.of(context).colorScheme.surface,
           child: SafeArea(

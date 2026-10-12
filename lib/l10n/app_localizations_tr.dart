@@ -10,6 +10,39 @@ class AppLocalizationsTr extends AppLocalizations {
   AppLocalizationsTr([String locale = 'tr']) : super(locale);
 
   @override
+  String get deleteReminder => 'Hatırlatıcıyı sil';
+
+  @override
+  String get deleteReminderBody =>
+      'Bu hatırlatıcı, kaynak metni ve planlanmış bildirimleri kalıcı olarak silinecek.';
+
+  @override
+  String get iosRemindersTitle => 'Hatırlatıcıların, senin kontrolünde';
+
+  @override
+  String get iosRemindersBody =>
+      'iOS diğer uygulamaların bildirimlerini okumaya izin vermez. Hatırlatıcını kendin ekle veya bir mesajı buraya yapıştır. Tarih ve saati sen seç; UNUTMA zamanı geldiğinde hatırlatsın.';
+
+  @override
+  String get iosEmptyBody =>
+      'Yeni bir hatırlatıcı ekle; tarihini ve saatini sen seç.';
+
+  @override
+  String get iosPasteTitle => 'Metinden ekle';
+
+  @override
+  String get iosPasteBody =>
+      'Bu metin yalnızca telefonunda taslak olarak saklanır. Tarih ve saati düzenleme ekranında sen belirleyeceksin; otomatik mesaj analizi yapılmaz.';
+
+  @override
+  String get iosOnboardValueBody =>
+      'Fatura, randevu ve yapılacak işlerini ekle. UNUTMA seçtiğin zamanda hatırlatsın.';
+
+  @override
+  String get iosOnboardTransformBody =>
+      'Mesajını yapıştır, taslağı kontrol et ve tarihini seç. Hatırlatıcıların yalnızca telefonunda kalır.';
+
+  @override
   String get appName => 'UNUTMA';
 
   @override

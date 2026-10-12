@@ -98,6 +98,60 @@ abstract class AppLocalizations {
     Locale('tr'),
   ];
 
+  /// No description provided for @deleteReminder.
+  ///
+  /// In tr, this message translates to:
+  /// **'Hatırlatıcıyı sil'**
+  String get deleteReminder;
+
+  /// No description provided for @deleteReminderBody.
+  ///
+  /// In tr, this message translates to:
+  /// **'Bu hatırlatıcı, kaynak metni ve planlanmış bildirimleri kalıcı olarak silinecek.'**
+  String get deleteReminderBody;
+
+  /// No description provided for @iosRemindersTitle.
+  ///
+  /// In tr, this message translates to:
+  /// **'Hatırlatıcıların, senin kontrolünde'**
+  String get iosRemindersTitle;
+
+  /// No description provided for @iosRemindersBody.
+  ///
+  /// In tr, this message translates to:
+  /// **'iOS diğer uygulamaların bildirimlerini okumaya izin vermez. Hatırlatıcını kendin ekle veya bir mesajı buraya yapıştır. Tarih ve saati sen seç; UNUTMA zamanı geldiğinde hatırlatsın.'**
+  String get iosRemindersBody;
+
+  /// No description provided for @iosEmptyBody.
+  ///
+  /// In tr, this message translates to:
+  /// **'Yeni bir hatırlatıcı ekle; tarihini ve saatini sen seç.'**
+  String get iosEmptyBody;
+
+  /// No description provided for @iosPasteTitle.
+  ///
+  /// In tr, this message translates to:
+  /// **'Metinden ekle'**
+  String get iosPasteTitle;
+
+  /// No description provided for @iosPasteBody.
+  ///
+  /// In tr, this message translates to:
+  /// **'Bu metin yalnızca telefonunda taslak olarak saklanır. Tarih ve saati düzenleme ekranında sen belirleyeceksin; otomatik mesaj analizi yapılmaz.'**
+  String get iosPasteBody;
+
+  /// No description provided for @iosOnboardValueBody.
+  ///
+  /// In tr, this message translates to:
+  /// **'Fatura, randevu ve yapılacak işlerini ekle. UNUTMA seçtiğin zamanda hatırlatsın.'**
+  String get iosOnboardValueBody;
+
+  /// No description provided for @iosOnboardTransformBody.
+  ///
+  /// In tr, this message translates to:
+  /// **'Mesajını yapıştır, taslağı kontrol et ve tarihini seç. Hatırlatıcıların yalnızca telefonunda kalır.'**
+  String get iosOnboardTransformBody;
+
   /// No description provided for @appName.
   ///
   /// In tr, this message translates to:

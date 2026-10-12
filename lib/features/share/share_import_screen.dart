@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/data/providers.dart';
 import '../../core/widgets/shared.dart';
+import '../../core/platform/platform_capabilities.dart';
 
 class ShareImportScreen extends ConsumerStatefulWidget {
   const ShareImportScreen({super.key, required this.text});
@@ -73,7 +74,7 @@ class _ShareImportScreenState extends ConsumerState<ShareImportScreen> {
             ),
             const SizedBox(height: 10),
             Text(
-              context.l.shareBody,
+              isIOS ? context.l.iosPasteBody : context.l.shareBody,
               style: TextStyle(
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
@@ -100,7 +101,9 @@ class _ShareImportScreenState extends ConsumerState<ShareImportScreen> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.auto_awesome_rounded),
-              label: Text(context.l.shareAnalyze),
+              label: Text(
+                isIOS ? context.l.continueLabel : context.l.shareAnalyze,
+              ),
             ),
             const SizedBox(height: 12),
             TextButton(

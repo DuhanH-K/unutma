@@ -3,6 +3,7 @@ import 'dart:developer' as developer;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -96,7 +97,9 @@ class NativeAdConfigLoader {
 
   Future<AdRuntimeConfig> load() async {
     try {
-      final value = await _channel.invokeMethod<Object?>('getConfig');
+      final value = await _channel
+          .invokeMethod<Object?>('getConfig')
+          .timeout(const Duration(seconds: 5));
       if (value is! Map) return const AdRuntimeConfig.disabled();
       final config = AdRuntimeConfig(
         enabled: value['enabled'] == true,
@@ -105,8 +108,6 @@ class NativeAdConfigLoader {
         testAds: value['testAds'] == true,
       );
       return config.isUsable ? config : const AdRuntimeConfig.disabled();
-    } on PlatformException {
-      return const AdRuntimeConfig.disabled();
     } on MissingPluginException {
       return const AdRuntimeConfig.disabled();
     }
@@ -310,12 +311,20 @@ class SharedPreferencesAdFrequencyStore implements AdFrequencyStore {
   }
 }
 
-class GoogleMobileAdsService implements AdService {
+class GoogleMobileAdsService with WidgetsBindingObserver implements AdService {
   GoogleMobileAdsService({
-    this._configLoader = const NativeAdConfigLoader(),
-    this._frequencyStore,
+    this.configLoader = const NativeAdConfigLoader(),
+    AdFrequencyStore? frequencyStore,
     DateTime Function()? clock,
-  }) : _clock = clock ?? DateTime.now;
+    bool Function()? canPresent,
+  }) : _frequencyStore = frequencyStore ?? SharedPreferencesAdFrequencyStore(),
+       _clock = clock ?? DateTime.now,
+       _canPresent = canPresent ?? (() => true) {
+    WidgetsBinding.instance.addObserver(this);
+    _foreground =
+        WidgetsBinding.instance.lifecycleState == null ||
+        WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+  }
 
   static const _maximumAdAge = Duration(minutes: 55);
   static const _frequencyGate = AdFrequencyGate(
@@ -324,9 +333,15 @@ class GoogleMobileAdsService implements AdService {
     dailyCap: AppConfig.dailyInterstitialCap,
   );
 
-  final NativeAdConfigLoader _configLoader;
-  AdFrequencyStore? _frequencyStore;
+  final NativeAdConfigLoader configLoader;
+  final AdFrequencyStore _frequencyStore;
   final DateTime Function() _clock;
+  final bool Function() _canPresent;
+  bool _foreground = true;
+  bool _privacyFormOpen = false;
+  Timer? _loadWatchdog;
+  int _loadGeneration = 0;
+  int _bannerGeneration = 0;
   final StreamController<AdPrivacyState> _states =
       StreamController<AdPrivacyState>.broadcast(sync: true);
   AdPrivacyState _state = const AdPrivacyState.disabled();
@@ -335,9 +350,11 @@ class GoogleMobileAdsService implements AdService {
   final Set<LoadedBannerAd> _banners = <LoadedBannerAd>{};
   DateTime? _loadedAt;
   Future<void> _frequencyWrites = Future.value();
+  bool _frequencyFailed = false;
   bool _initializing = false;
   bool _initialized = false;
   bool _mobileAdsStarted = false;
+  Future<InitializationStatus>? _sdkInitialization;
   bool _loading = false;
   bool _showing = false;
   bool _sessionSuppressed = false;
@@ -355,6 +372,7 @@ class GoogleMobileAdsService implements AdService {
 
   void _logAds(String message) {
     if (!kDebugMode) return;
+    debugPrint('[ADS][$_platformLabel] $message');
     developer.log('[ADS][$_platformLabel] $message', name: 'UNUTMA.AdMob');
   }
 
@@ -362,8 +380,7 @@ class GoogleMobileAdsService implements AdService {
     _logAds('[Interstitial] $message');
   }
 
-  AdFrequencyStore get _store =>
-      _frequencyStore ??= SharedPreferencesAdFrequencyStore();
+  AdFrequencyStore get _store => _frequencyStore;
 
   @override
   AdPrivacyState get state => _state;
@@ -377,11 +394,17 @@ class GoogleMobileAdsService implements AdService {
 
   @override
   Future<void> initialize() async {
-    if (_initialized || _initializing || _disposed) return;
+    if (_initialized ||
+        _initializing ||
+        _disposed ||
+        !_foreground ||
+        !_canPresent()) {
+      return;
+    }
     _initializing = true;
     var retryInitialization = false;
     try {
-      _config = await _configLoader.load();
+      _config = await configLoader.load();
       if (!_config.isUsable) {
         _logAds('disabled: runtime configuration is unavailable or invalid');
         _initialized = true;
@@ -413,7 +436,9 @@ class GoogleMobileAdsService implements AdService {
           FormError? formError;
           await ConsentForm.loadAndShowConsentFormIfRequired(
             (error) => formError = error,
-          ).timeout(const Duration(seconds: 15));
+          );
+          // A displayed consent form is user interaction, not a network
+          // timeout. Never start a second form while the first is still open.
           if (formError == null) {
             consentFlowCompleted = true;
             _logAds('consent form flow completed');
@@ -456,7 +481,10 @@ class GoogleMobileAdsService implements AdService {
   }
 
   void _scheduleInitializationRetry() {
-    if (_disposed || _initialized || _initializationRetry?.isActive == true) {
+    if (_disposed ||
+        !_foreground ||
+        _initialized ||
+        _initializationRetry?.isActive == true) {
       return;
     }
     final exponent = _initializationFailures.clamp(0, 4);
@@ -472,9 +500,13 @@ class GoogleMobileAdsService implements AdService {
   Future<void> _refreshConsentState() async {
     final required =
         await ConsentInformation.instance
-            .getPrivacyOptionsRequirementStatus() ==
+            .getPrivacyOptionsRequirementStatus()
+            .timeout(const Duration(seconds: 5)) ==
         PrivacyOptionsRequirementStatus.required;
-    final allowed = await ConsentInformation.instance.canRequestAds();
+    final allowed = await ConsentInformation.instance.canRequestAds().timeout(
+      const Duration(seconds: 5),
+    );
+    if (allowed) await _startMobileAds();
     _emit(
       AdPrivacyState(
         enabled: _config.isUsable,
@@ -485,16 +517,49 @@ class GoogleMobileAdsService implements AdService {
   }
 
   Future<void> _startMobileAds() async {
-    if (_mobileAdsStarted || _disposed) return;
-    await MobileAds.instance.initialize();
+    if (_disposed) return;
+    if (_mobileAdsStarted) {
+      await _loadInterstitial();
+      return;
+    }
+    final initialization = _sdkInitialization ??= MobileAds.instance
+        .initialize();
+    try {
+      await initialization.timeout(const Duration(seconds: 35));
+    } on TimeoutException {
+      // Keep the same SDK future: a late native response must not create
+      // overlapping SDK initialization attempts.
+      rethrow;
+    } catch (_) {
+      _sdkInitialization = null;
+      rethrow;
+    }
+    if (_disposed) return;
     _mobileAdsStarted = true;
     _logAds('SDK initialized');
     await _loadInterstitial();
   }
 
   Future<void> _loadInterstitial() async {
-    if (!_mobileAdsStarted || _loading || _showing || _disposed) return;
+    if (!_mobileAdsStarted ||
+        !_state.canRequestAds ||
+        !_foreground ||
+        _loading ||
+        _showing ||
+        _disposed ||
+        _interstitial != null) {
+      return;
+    }
     _loading = true;
+    final generation = ++_loadGeneration;
+    _loadWatchdog?.cancel();
+    _loadWatchdog = Timer(const Duration(seconds: 30), () {
+      if (_disposed || generation != _loadGeneration || !_loading) return;
+      _loading = false;
+      _loadGeneration++;
+      _logInterstitial('load timed out');
+      _scheduleInterstitialRetry();
+    });
     _logInterstitial('load requested');
     try {
       await InterstitialAd.load(
@@ -502,6 +567,13 @@ class GoogleMobileAdsService implements AdService {
         request: const AdRequest(),
         adLoadCallback: InterstitialAdLoadCallback(
           onAdLoaded: (ad) {
+            if (_disposed ||
+                generation != _loadGeneration ||
+                !_state.canRequestAds) {
+              ad.dispose();
+              return;
+            }
+            _loadWatchdog?.cancel();
             _loading = false;
             if (_disposed) {
               ad.dispose();
@@ -516,6 +588,8 @@ class GoogleMobileAdsService implements AdService {
             _logInterstitial('loaded');
           },
           onAdFailedToLoad: (error) {
+            if (_disposed || generation != _loadGeneration) return;
+            _loadWatchdog?.cancel();
             _loading = false;
             _interstitial = null;
             _loadedAt = null;
@@ -528,6 +602,8 @@ class GoogleMobileAdsService implements AdService {
         ),
       );
     } catch (error) {
+      if (_disposed || generation != _loadGeneration) return;
+      _loadWatchdog?.cancel();
       _loading = false;
       _interstitial = null;
       _loadedAt = null;
@@ -537,7 +613,12 @@ class GoogleMobileAdsService implements AdService {
   }
 
   void _scheduleInterstitialRetry() {
-    if (_disposed || _interstitialRetry?.isActive == true) return;
+    if (_disposed ||
+        !_foreground ||
+        !_state.canRequestAds ||
+        _interstitialRetry?.isActive == true) {
+      return;
+    }
     final exponent = _interstitialLoadFailures.clamp(0, 4);
     final delay = Duration(seconds: 30 * (1 << exponent));
     _interstitialLoadFailures++;
@@ -560,13 +641,22 @@ class GoogleMobileAdsService implements AdService {
     if (width <= 0 ||
         !_state.canRequestAds ||
         !_mobileAdsStarted ||
+        !_foreground ||
         _disposed) {
       return null;
     }
     try {
       _logAds('[Banner] load requested');
-      final size = await AdSize.getLargeAnchoredAdaptiveBannerAdSize(width);
-      if (size == null || _disposed) return null;
+      final generation = _bannerGeneration;
+      final size = await AdSize.getLargeAnchoredAdaptiveBannerAdSize(width)
+          .timeout(const Duration(seconds: 5));
+      if (size == null ||
+          _disposed ||
+          !_foreground ||
+          !_state.canRequestAds ||
+          generation != _bannerGeneration) {
+        return null;
+      }
       final result = Completer<LoadedBannerAd?>();
       var settled = false;
       late final BannerAd ad;
@@ -585,8 +675,13 @@ class GoogleMobileAdsService implements AdService {
         request: const AdRequest(),
         listener: BannerAdListener(
           onAdLoaded: (loaded) {
-            if (_disposed || settled) {
+            if (_disposed ||
+                settled ||
+                !_foreground ||
+                !_state.canRequestAds ||
+                generation != _bannerGeneration) {
               loaded.dispose();
+              complete(null);
               return;
             }
             final banner = LoadedBannerAd(loaded as BannerAd);
@@ -605,7 +700,13 @@ class GoogleMobileAdsService implements AdService {
           onAdImpression: (_) => _logAds('[Banner] impression'),
         ),
       );
-      await ad.load();
+      try {
+        await ad.load().timeout(const Duration(seconds: 5));
+      } catch (_) {
+        settled = true;
+        ad.dispose();
+        rethrow;
+      }
       return await result.future.timeout(
         const Duration(seconds: 15),
         onTimeout: () {
@@ -636,6 +737,7 @@ class GoogleMobileAdsService implements AdService {
         await _store.write(updated);
         _logAds('Completed action; count=${updated.actionsSinceAd}');
       } catch (_) {
+        _frequencyFailed = true;
         // A failed cap write must never unlock an ad display.
       }
     });
@@ -644,6 +746,10 @@ class GoogleMobileAdsService implements AdService {
 
   @override
   Future<bool> showAtSessionBreak({required bool isPro}) async {
+    if (!_foreground || !_canPresent() || _initializing || _privacyFormOpen) {
+      _logInterstitial('blocked: foreground, route or consent dialog');
+      return false;
+    }
     final blockedReason = switch ((
       isPro,
       _sessionSuppressed,
@@ -665,6 +771,10 @@ class GoogleMobileAdsService implements AdService {
       return false;
     }
     await _frequencyWrites;
+    if (_frequencyFailed) {
+      _logInterstitial('blocked: frequency storage failure');
+      return false;
+    }
     AdFrequencyRecord record;
     try {
       record = await _store.read();
@@ -694,6 +804,17 @@ class GoogleMobileAdsService implements AdService {
       return false;
     }
 
+    // Re-check after asynchronous frequency storage; navigation or permission
+    // dialogs may have changed while the read was in flight.
+    if (!_foreground ||
+        !_canPresent() ||
+        _sessionSuppressed ||
+        _showing ||
+        _disposed ||
+        !_state.canRequestAds ||
+        _privacyFormOpen) {
+      return false;
+    }
     _showing = true;
     _interstitial = null;
     _loadedAt = null;
@@ -705,7 +826,9 @@ class GoogleMobileAdsService implements AdService {
           try {
             final current = await _store.read();
             await _store.write(_frequencyGate.recordShown(current, _clock()));
-          } catch (_) {}
+          } catch (_) {
+            _frequencyFailed = true;
+          }
         });
         if (!shown.isCompleted) shown.complete(true);
       },
@@ -755,7 +878,29 @@ class GoogleMobileAdsService implements AdService {
 
   @override
   Future<bool> showPrivacyOptions() async {
-    if (!_config.isUsable || _disposed) return false;
+    if (!_config.isUsable ||
+        _disposed ||
+        _privacyFormOpen ||
+        _initializing ||
+        !_foreground) {
+      return false;
+    }
+    _privacyFormOpen = true;
+    _bannerGeneration++;
+    _loadGeneration++;
+    _loadWatchdog?.cancel();
+    _loading = false;
+    _interstitial?.dispose();
+    _interstitial = null;
+    _loadedAt = null;
+    _disposeBanners();
+    _emit(
+      AdPrivacyState(
+        enabled: true,
+        canRequestAds: false,
+        privacyOptionsRequired: _state.privacyOptionsRequired,
+      ),
+    );
     FormError? formError;
     try {
       await ConsentForm.showPrivacyOptionsForm((error) => formError = error);
@@ -772,6 +917,24 @@ class GoogleMobileAdsService implements AdService {
     } catch (error) {
       _logAds('privacy options failed: ${error.runtimeType}');
       return false;
+    } finally {
+      _privacyFormOpen = false;
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _foreground = state == AppLifecycleState.resumed;
+    if (!_foreground) {
+      _initializationRetry?.cancel();
+      _initializationRetry = null;
+      _interstitialRetry?.cancel();
+      _interstitialRetry = null;
+    } else if (!_disposed && !_privacyFormOpen) {
+      unawaited(initialize());
+      if (_mobileAdsStarted && _state.canRequestAds) {
+        unawaited(_loadInterstitial());
+      }
     }
   }
 
@@ -779,6 +942,7 @@ class GoogleMobileAdsService implements AdService {
   Future<void> resetLocalState() async {
     try {
       await _store.clear();
+      _frequencyFailed = false;
     } catch (_) {}
   }
 
@@ -786,6 +950,10 @@ class GoogleMobileAdsService implements AdService {
   Future<void> dispose() async {
     if (_disposed) return;
     _disposed = true;
+    _bannerGeneration++;
+    WidgetsBinding.instance.removeObserver(this);
+    _loadWatchdog?.cancel();
+    _loadGeneration++;
     _initializationRetry?.cancel();
     _initializationRetry = null;
     _interstitialRetry?.cancel();

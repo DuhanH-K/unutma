@@ -14,6 +14,18 @@ import 'support/memory_repository.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  const appInfoChannel = MethodChannel('app.unutma/app-info');
+  setUp(() {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+          appInfoChannel,
+          (_) async => {'name': '1.0.5', 'build': '7'},
+        );
+  });
+  tearDown(() {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(appInfoChannel, null);
+  });
   Future<ProviderContainer> launch(
     WidgetTester tester,
     MemoryRepository repo, {
@@ -33,7 +45,7 @@ void main() {
       overrides: [
         repositoryProvider.overrideWithValue(repo),
         clockProvider.overrideWithValue(() => fixtureNow),
-        if (adService != null) adServiceProvider.overrideWithValue(adService),
+        adServiceProvider.overrideWithValue(adService ?? const NoOpAdService()),
       ],
     );
     addTearDown(container.dispose);
@@ -174,7 +186,8 @@ void main() {
     final repo = MemoryRepository()
       ..listener = false
       ..reminders = false;
-    await launch(tester, repo, route: '/new');
+    final ads = _TrackingAdService();
+    await launch(tester, repo, route: '/new', adService: ads);
     await tester.enterText(find.byType(TextFormField).first, 'Su faturası');
     await tester.tap(find.text('Tarih seç'));
     await tester.pumpAndSettle();
@@ -191,6 +204,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(repo.items.single.title, 'Su faturası');
     expect(repo.items.single.dueAt, isNotNull);
+    expect(ads.actions, 1);
+    expect(ads.showAttempts, 1);
   });
   testWidgets('shared text is previewed before persistence', (tester) async {
     final repo = MemoryRepository();
@@ -255,6 +270,31 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(ads.initializations, initializationsBeforeResume + 1);
+  });
+
+  testWidgets('open dialogs block ad presentation until they close', (
+    tester,
+  ) async {
+    final container = await launch(tester, MemoryRepository());
+    final dialog = showDialog<void>(
+      context: tester.element(find.byType(NavigationBar)),
+      builder: (context) => AlertDialog(
+        title: const Text('Test dialog'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close dialog'),
+          ),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(container.read(adModalOpenProvider), true);
+    await tester.tap(find.text('Close dialog'));
+    await tester.pumpAndSettle();
+    await dialog;
+    expect(container.read(adModalOpenProvider), false);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('parsed shared text opens its review card', (tester) async {
@@ -453,7 +493,20 @@ class _TrackingAdService extends NoOpAdService {
   int initializations = 0;
   int suppressions = 0;
   int resumptions = 0;
+  int actions = 0;
+  int showAttempts = 0;
   bool suppressed = false;
+
+  @override
+  Future<void> registerAction() async {
+    actions++;
+  }
+
+  @override
+  Future<bool> showAtSessionBreak({required bool isPro}) async {
+    showAttempts++;
+    return false;
+  }
 
   @override
   Future<void> initialize() async {

@@ -10,6 +10,7 @@ import 'core/services/ad_providers.dart';
 import 'core/theme/app_theme.dart';
 import 'core/widgets/shared.dart';
 import 'core/widgets/adaptive_banner_ad.dart';
+import 'core/widgets/startup_gate.dart';
 import 'l10n/app_localizations.dart';
 import 'features/dashboard/dashboard_screen.dart';
 import 'features/inbox/inbox_screen.dart';
@@ -23,6 +24,15 @@ import 'features/share/share_import_screen.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   final router = GoRouter(
+    observers: [
+      AdModalObserver(
+        (open) => WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (ref.mounted) {
+            ref.read(adModalOpenProvider.notifier).update(open);
+          }
+        }),
+      ),
+    ],
     routes: [
       ShellRoute(
         builder: (context, state, child) =>
@@ -79,6 +89,8 @@ class _UnutmaAppState extends ConsumerState<UnutmaApp>
   static const _regularRoutes = {'/', '/inbox', '/history', '/settings'};
   bool consumingIntent = false;
   GoRouter? _router;
+  bool _startupComplete = false;
+  bool _foreground = true;
 
   @override
   void initState() {
@@ -108,12 +120,32 @@ class _UnutmaAppState extends ConsumerState<UnutmaApp>
     if (_regularRoutes.contains(path)) {
       ref.read(adServiceProvider).resumeRegularSession();
     }
+    _updateAdPresentation();
+  }
+
+  void _updateAdPresentation() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final path = _router?.state.uri.path ?? '';
+      final onboarded = ref.read(preferencesProvider).value?.onboarded == true;
+      final allowed =
+          _startupComplete &&
+          _foreground &&
+          onboarded &&
+          (_regularRoutes.contains(path) || path.startsWith('/card/'));
+      ref.read(adPresentationAllowedProvider.notifier).update(allowed);
+      if (allowed) unawaited(ref.read(adServiceProvider).initialize());
+    });
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    _foreground = state == AppLifecycleState.resumed;
+    if (!_foreground) {
+      ref.read(adPresentationAllowedProvider.notifier).update(false);
+    }
     if (state == AppLifecycleState.resumed) {
-      unawaited(ref.read(adServiceProvider).initialize());
+      _updateAdPresentation();
       unawaited(refresh());
     }
   }
@@ -158,6 +190,8 @@ class _UnutmaAppState extends ConsumerState<UnutmaApp>
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(preferencesProvider, (_, _) => _updateAdPresentation());
+    ref.listen(adModalOpenProvider, (_, _) => _updateAdPresentation());
     final prefs = ref.watch(preferencesProvider);
     final p = prefs.value;
     return MaterialApp.router(
@@ -174,6 +208,13 @@ class _UnutmaAppState extends ConsumerState<UnutmaApp>
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
       routerConfig: ref.watch(routerProvider),
+      builder: (context, child) => StartupGate(
+        onComplete: () {
+          _startupComplete = true;
+          _updateAdPresentation();
+        },
+        child: child ?? const SizedBox.shrink(),
+      ),
     );
   }
 }
@@ -188,23 +229,17 @@ class AppShell extends ConsumerStatefulWidget {
 
 class _AppShellState extends ConsumerState<AppShell> {
   bool checked = false;
-  bool adsStarted = false;
   @override
   Widget build(BuildContext context) {
     final p = ref.watch(preferencesProvider);
     return p.when(
-      loading: () => const Scaffold(body: Center(child: BrandMark(size: 64))),
+      loading: () =>
+          const Scaffold(body: Center(child: CircularProgressIndicator())),
       error: (_, _) => Scaffold(
         body: ErrorPanel(retry: () => ref.invalidate(preferencesProvider)),
       ),
       data: (prefs) {
         if (!prefs.onboarded) return const OnboardingScreen();
-        if (!adsStarted) {
-          adsStarted = true;
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            unawaited(ref.read(adServiceProvider).initialize());
-          });
-        }
         if (!checked) {
           checked = true;
           WidgetsBinding.instance.addPostFrameCallback((_) async {

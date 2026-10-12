@@ -10,6 +10,38 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
+  String get deleteReminder => 'Delete reminder';
+
+  @override
+  String get deleteReminderBody =>
+      'This reminder, its source text and its scheduled notifications will be permanently deleted.';
+
+  @override
+  String get iosRemindersTitle => 'Your reminders, under your control';
+
+  @override
+  String get iosRemindersBody =>
+      'iOS does not allow reading other apps\' notifications. Add a reminder yourself or paste a message here. Choose the date and time; UNUTMA will remind you when it is due.';
+
+  @override
+  String get iosEmptyBody => 'Add a reminder and choose its date and time.';
+
+  @override
+  String get iosPasteTitle => 'Add from text';
+
+  @override
+  String get iosPasteBody =>
+      'This text is saved only on your phone as a draft. You choose the date and time in the editor; messages are not automatically analyzed.';
+
+  @override
+  String get iosOnboardValueBody =>
+      'Add your bills, appointments and tasks. UNUTMA will remind you at the time you choose.';
+
+  @override
+  String get iosOnboardTransformBody =>
+      'Paste a message, review the draft and choose its date. Your reminders stay on your phone.';
+
+  @override
   String get appName => 'UNUTMA';
 
   @override

@@ -103,6 +103,17 @@ class MainActivity:FlutterActivity() {
     }
     override fun configureFlutterEngine(flutterEngine:FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "app.unutma/app-info")
+            .setMethodCallHandler { call, result ->
+                if (call.method == "getInfo") {
+                    result.success(mapOf(
+                        "name" to BuildConfig.VERSION_NAME,
+                        "build" to BuildConfig.VERSION_CODE.toString(),
+                    ))
+                } else {
+                    result.notImplemented()
+                }
+            }
         requestNotificationListenerRebind()
         consumeIntent(intent)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, AD_CONFIG_CHANNEL)

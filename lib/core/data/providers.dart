@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 
 import '../domain/action_card.dart';
 import '../platform/unutma_api.g.dart';
@@ -8,14 +9,33 @@ final repositoryProvider = Provider<CardRepository>(
   (ref) => NativeCardRepository(),
 );
 final clockProvider = Provider<DateTime Function()>((ref) => DateTime.now);
+final appVersionProvider = FutureProvider<String>((ref) async {
+  try {
+    final info = await const MethodChannel('app.unutma/app-info')
+        .invokeMapMethod<String, String>('getInfo')
+        .timeout(const Duration(seconds: 2));
+    final name = info?['name'];
+    final build = info?['build'];
+    if (name == null || build == null || name.isEmpty || build.isEmpty) {
+      return '—';
+    }
+    return '$name ($build)';
+  } catch (_) {
+    // Never invent a version or block settings if native metadata is unavailable.
+    return '—';
+  }
+}, retry: (_, _) => null);
 final accessProvider = FutureProvider<AccessDto>(
   (ref) => ref.watch(repositoryProvider).access(),
+  retry: (_, _) => null,
 );
 final sourcesProvider = FutureProvider<List<SourceDto>>(
   (ref) => ref.watch(repositoryProvider).sources(),
+  retry: (_, _) => null,
 );
 final cardsProvider = AsyncNotifierProvider<CardsController, List<ActionCard>>(
   CardsController.new,
+  retry: (_, _) => null,
 );
 
 class CardsController extends AsyncNotifier<List<ActionCard>> {
@@ -44,6 +64,7 @@ class CardsController extends AsyncNotifier<List<ActionCard>> {
 final preferencesProvider =
     AsyncNotifierProvider<PreferencesController, PreferencesDto>(
       PreferencesController.new,
+      retry: (_, _) => null,
     );
 
 class PreferencesController extends AsyncNotifier<PreferencesDto> {

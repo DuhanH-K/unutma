@@ -6,6 +6,8 @@ import 'package:intl/intl.dart';
 import '../../core/data/providers.dart';
 import '../../core/domain/action_card.dart';
 import '../../core/widgets/shared.dart';
+import '../../core/platform/platform_capabilities.dart';
+import '../../core/widgets/ios_reminder_entry.dart';
 
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
@@ -116,7 +118,11 @@ class DashboardScreen extends ConsumerWidget {
                     ],
                   ),
                 ),
-                if (access.value?.listenerEnabled == false) ...[
+                if (isIOS) ...[
+                  const SizedBox(height: 16),
+                  const IOSReminderEntry(),
+                ],
+                if (!isIOS && access.value?.listenerEnabled == false) ...[
                   const SizedBox(height: 16),
                   Card(
                     child: Padding(
@@ -178,7 +184,10 @@ class DashboardScreen extends ConsumerWidget {
                   data: (all) {
                     final active = all.where((c) => c.isActive).toList();
                     if (active.isEmpty) {
-                      return EmptyPanel(title: l.allClear, body: l.emptyBody);
+                      return EmptyPanel(
+                        title: l.allClear,
+                        body: isIOS ? l.iosEmptyBody : l.emptyBody,
+                      );
                     }
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,

@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/data/providers.dart';
 import '../../core/domain/action_card.dart';
 import '../../core/widgets/shared.dart';
+import '../../core/platform/platform_capabilities.dart';
 import 'card_controls.dart';
 
 class DetailScreen extends ConsumerWidget {
@@ -275,6 +276,37 @@ class _DetailContent extends ConsumerWidget {
           Text(
             card.status == CardStatus.done ? l.completed : l.archived,
             textAlign: TextAlign.center,
+          ),
+        if (isIOS)
+          TextButton.icon(
+            icon: const Icon(Icons.delete_outline_rounded),
+            label: Text(l.deleteReminder),
+            onPressed: () async {
+              final confirmed = await showDialog<bool>(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: Text(l.deleteReminder),
+                  content: Text(l.deleteReminderBody),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context, false),
+                      child: Text(l.cancel),
+                    ),
+                    FilledButton(
+                      onPressed: () => Navigator.pop(context, true),
+                      child: Text(l.deleteReminder),
+                    ),
+                  ],
+                ),
+              );
+              if (confirmed != true || !context.mounted) return;
+              final removed = await runAction(
+                context,
+                () =>
+                    ref.read(cardsProvider.notifier).transition(card, 'delete'),
+              );
+              if (removed && context.mounted) context.go('/');
+            },
           ),
       ],
     );

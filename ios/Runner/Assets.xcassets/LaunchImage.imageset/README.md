@@ -1,5 +1,6 @@
 # Launch Screen Assets
 
-You can customize the launch screen with your own desired assets by replacing the image files in this directory.
-
-You can also do it by opening your Flutter project's Xcode project with `open ios/Runner.xcworkspace`, selecting `Runner/Assets.xcassets` in the Project Navigator and dropping in the desired images.
+LaunchImage assets are resized from `assets/brand/unutma_app_icon_1024.png` at
+88pt (1x/2x/3x). Keep the real UNUTMA mark and the light/dark LaunchBackground
+color asset aligned with Flutter's StartupGate. AppIcon uses opaque variants
+of the same artwork; do not replace it with Flutter sample icons.

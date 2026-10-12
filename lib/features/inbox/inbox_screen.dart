@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/data/providers.dart';
 import '../../core/domain/action_card.dart';
 import '../../core/widgets/shared.dart';
+import '../../core/platform/platform_capabilities.dart';
 
 class InboxScreen extends ConsumerWidget {
   const InboxScreen({super.key});
@@ -43,7 +44,7 @@ class InboxScreen extends ConsumerWidget {
                   return items.isEmpty
                       ? EmptyPanel(
                           title: l.emptyInbox,
-                          body: l.emptyInboxBody,
+                          body: isIOS ? l.iosEmptyBody : l.emptyInboxBody,
                           icon: Icons.inbox_outlined,
                         )
                       : Column(

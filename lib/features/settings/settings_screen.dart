@@ -3,9 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/data/providers.dart';
-import '../../core/config/app_config.dart';
 import '../../core/services/ad_providers.dart';
 import '../../core/widgets/shared.dart';
+import '../../core/platform/platform_capabilities.dart';
+import '../../core/widgets/ios_reminder_entry.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -30,18 +31,21 @@ class SettingsScreen extends ConsumerWidget {
               Card(
                 child: Column(
                   children: [
-                    ListTile(
-                      leading: const Icon(Icons.notifications_active_outlined),
-                      title: Text(l.notificationAccess),
-                      subtitle: Text(
-                        access.value?.listenerEnabled == true
-                            ? l.enabled
-                            : l.disabled,
+                    if (!isIOS)
+                      ListTile(
+                        leading: const Icon(
+                          Icons.notifications_active_outlined,
+                        ),
+                        title: Text(l.notificationAccess),
+                        subtitle: Text(
+                          access.value?.listenerEnabled == true
+                              ? l.enabled
+                              : l.disabled,
+                        ),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => context.push('/disclosure'),
                       ),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () => context.push('/disclosure'),
-                    ),
-                    const Divider(),
+                    if (!isIOS) const Divider(),
                     ListTile(
                       leading: const Icon(Icons.alarm_outlined),
                       title: Text(l.reminderPermission),
@@ -96,6 +100,7 @@ class SettingsScreen extends ConsumerWidget {
                 ),
               ),
               SectionLabel(l.privacy.toUpperCase()),
+              if (isIOS) const IOSReminderEntry(),
               Card(
                 child: Column(
                   children: [
@@ -209,13 +214,14 @@ class SettingsScreen extends ConsumerWidget {
                         },
                       ),
                     ),
-                    const Divider(),
-                    ListTile(
-                      leading: const Icon(Icons.filter_alt_outlined),
-                      title: Text(l.ignoredSources),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () => context.push('/sources'),
-                    ),
+                    if (!isIOS) const Divider(),
+                    if (!isIOS)
+                      ListTile(
+                        leading: const Icon(Icons.filter_alt_outlined),
+                        title: Text(l.ignoredSources),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => context.push('/sources'),
+                      ),
                   ],
                 ),
               ),
@@ -235,7 +241,9 @@ class SettingsScreen extends ConsumerWidget {
                   children: [
                     ListTile(
                       title: Text(l.version),
-                      trailing: const Text(AppConfig.version),
+                      trailing: Text(
+                        ref.watch(appVersionProvider).value ?? '—',
+                      ),
                     ),
                     const Divider(),
                     ListTile(
