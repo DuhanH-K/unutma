@@ -60,16 +60,19 @@ void main() {
   });
 
   test(
-    'Codemagic preserves signing integration without automatic publishing',
+    'Codemagic uploads IPA without automatic review or App Store submission',
     () {
       final workflow = File('codemagic.yaml').readAsStringSync();
       expect(workflow, contains('app_store_connect: Codemagic'));
       expect(workflow, contains('distribution_type: app_store'));
       expect(workflow, contains('xcode-project use-profiles'));
       expect(workflow, contains('build/ios/ipa/*.ipa'));
+      expect(workflow, contains('auth: integration'));
+      expect(workflow, contains('submit_to_testflight: false'));
+      expect(workflow, contains('submit_to_app_store: false'));
       expect(
         RegExp(r'^\s*publishing:', multiLine: true).hasMatch(workflow),
-        false,
+        true,
       );
       expect(
         RegExp(r'^\s*triggering:', multiLine: true).hasMatch(workflow),
